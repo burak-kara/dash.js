@@ -40,11 +40,14 @@ import URLUtils from '../../streaming/utils/URLUtils.js';
 import BaseURL from '../vo/BaseURL.js';
 import MpdLocation from '../vo/MpdLocation.js';
 import Utils from '../../core/Utils.js';
+import Constants from '../../streaming/constants/Constants.js';
+import Round10 from '../utils/Round10.js';
 
 const QUERY_PARAMETER_KEYS = {
     THROUGHPUT: '_DASH_throughput',
     PATHWAY: '_DASH_pathway',
-    URL: 'url'
+    URL: 'url',
+    BUFFER_LEVEL: 'buffer'
 };
 
 const THROUGHPUT_SAMPLES = 4;
@@ -58,6 +61,7 @@ function ContentSteeringController() {
         currentSteeringResponseData,
         serviceLocationList,
         throughputList,
+        bufferLevel,
         nextRequestTimer,
         urlLoader,
         errHandler,
@@ -118,7 +122,7 @@ function ContentSteeringController() {
         eventBus.on(MediaPlayerEvents.FRAGMENT_LOADING_STARTED, _onFragmentLoadingStarted, instance);
         eventBus.on(MediaPlayerEvents.MANIFEST_LOADING_STARTED, _onManifestLoadingStarted, instance);
         eventBus.on(MediaPlayerEvents.THROUGHPUT_MEASUREMENT_STORED, _onThroughputMeasurementStored, instance);
-
+        eventBus.on(MediaPlayerEvents.BUFFER_LEVEL_UPDATED, _onBufferLevelUpdated, instance);
     }
 
     /**
@@ -140,7 +144,7 @@ function ContentSteeringController() {
     }
 
     /**
-     * When a throughput measurement  was stored in ThroughputModel we save it
+     * When a throughput measurement was stored in ThroughputModel we save it
      * @param {object} e
      * @private
      */
@@ -150,6 +154,18 @@ function ContentSteeringController() {
         }
 
         _storeThroughputForServiceLocation(e.throughputValues.serviceLocation, e.throughputValues);
+    }
+
+    /**
+     * When the buffer level of the video media type has been updated, we store it
+     * @param {object} e
+     * @private
+     */
+    function _onBufferLevelUpdated(e) {
+        if (!e || !e.bufferLevel || !e.mediaType || e.mediaType !== Constants.VIDEO) {
+            return;
+        }
+        bufferLevel = Round10.round10(e.bufferLevel * 1000,0);
     }
 
     /**
@@ -282,7 +298,6 @@ function ContentSteeringController() {
 
         const additionalQueryParameter = [];
 
-
         const serviceLocations = serviceLocationList.baseUrl.all.concat(serviceLocationList.location.all);
         if (serviceLocations.length > 0) {
 
@@ -324,6 +339,10 @@ function ContentSteeringController() {
                 key: QUERY_PARAMETER_KEYS.THROUGHPUT,
                 value: throughputString
             });
+            additionalQueryParameter.push({
+                key: QUERY_PARAMETER_KEYS.BUFFER_LEVEL,
+                value: bufferLevel
+            });
         }
 
         url = Utils.addAdditionalQueryParameterToUrl(url, additionalQueryParameter);
@@ -344,7 +363,6 @@ function ContentSteeringController() {
 
         return parseInt(throughput * 1000);
     }
-
 
     /**
      * Parse the steering response and create instance of model ContentSteeringResponse
@@ -559,11 +577,13 @@ function ContentSteeringController() {
         eventBus.off(MediaPlayerEvents.FRAGMENT_LOADING_STARTED, _onFragmentLoadingStarted, instance);
         eventBus.off(MediaPlayerEvents.MANIFEST_LOADING_STARTED, _onManifestLoadingStarted, instance);
         eventBus.off(MediaPlayerEvents.THROUGHPUT_MEASUREMENT_STORED, _onThroughputMeasurementStored, instance);
+        eventBus.off(MediaPlayerEvents.BUFFER_LEVEL_UPDATED, _onBufferLevelUpdated, instance);
     }
 
     function _resetInitialSettings() {
         currentSteeringResponseData = null;
         throughputList = {};
+        bufferLevel = 0;
         serviceLocationList = {
             baseUrl: {
                 current: null,
